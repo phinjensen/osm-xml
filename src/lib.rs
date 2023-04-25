@@ -1,5 +1,11 @@
-#![deny(missing_copy_implementations, trivial_numeric_casts, trivial_casts, unused_extern_crates,
-       unused_import_braces, unused_qualifications)]
+#![deny(
+    missing_copy_implementations,
+    trivial_numeric_casts,
+    trivial_casts,
+    unused_extern_crates,
+    unused_import_braces,
+    unused_qualifications
+)]
 
 extern crate fnv;
 extern crate xml;
@@ -7,16 +13,17 @@ extern crate xml;
 use std::io::prelude::*;
 use std::str::FromStr;
 
-use xml::reader::{EventReader, XmlEvent};
 use xml::attribute::OwnedAttribute;
+use xml::reader::{EventReader, XmlEvent};
 
 pub mod error;
 use error::{Error, ErrorReason};
 use fnv::FnvHashMap;
 
 mod elements;
-pub use elements::{Bounds, Coordinate, Id, Member, Node, Reference, Relation, Role, Tag,
-                   UnresolvedReference, Way};
+pub use elements::{
+    Bounds, Coordinate, Id, Member, Node, Reference, Relation, Role, Tag, UnresolvedReference, Way,
+};
 mod polygon;
 
 #[derive(Debug)]
@@ -46,40 +53,32 @@ impl OSM {
             match parse_element_data(&mut parser) {
                 Err(Error::XmlParseError(err)) => return Err(Error::XmlParseError(err)),
                 Err(Error::BoundsMissing(_)) => osm.bounds = None,
-                Err(Error::MalformedTag(_)) |
-                Err(Error::MalformedNode(_)) |
-                Err(Error::MalformedWay(_)) |
-                Err(Error::MalformedRelation(_)) |
-                Err(Error::UnknownElement) => continue,
+                Err(Error::MalformedTag(_))
+                | Err(Error::MalformedNode(_))
+                | Err(Error::MalformedWay(_))
+                | Err(Error::MalformedRelation(_))
+                | Err(Error::UnknownElement) => continue,
                 Ok(data) => match data {
                     ElementData::EndOfDocument => return Ok(osm),
                     ElementData::Ignored => continue,
                     ElementData::Bounds(minlat, minlon, maxlat, maxlon) => {
                         osm.bounds = Some(Bounds {
-                            minlat: minlat,
-                            minlon: minlon,
-                            maxlat: maxlat,
-                            maxlon: maxlon,
+                            minlat,
+                            minlon,
+                            maxlat,
+                            maxlon,
                         });
                     }
                     ElementData::Node(id, lat, lon, tags) => {
-                        osm.nodes.insert(
-                            id,
-                            Node {
-                                id: id,
-                                lat: lat,
-                                lon: lon,
-                                tags: tags,
-                            },
-                        );
+                        osm.nodes.insert(id, Node { id, lat, lon, tags });
                     }
                     ElementData::Way(id, node_refs, tags) => {
                         osm.ways.insert(
                             id,
                             Way {
-                                id: id,
+                                id,
                                 nodes: node_refs,
-                                tags: tags,
+                                tags,
                             },
                         );
                     }
@@ -93,15 +92,18 @@ impl OSM {
 
     pub fn resolve_reference<'a>(&self, reference: &UnresolvedReference) -> Reference {
         match *reference {
-            UnresolvedReference::Node(id) => self.nodes
+            UnresolvedReference::Node(id) => self
+                .nodes
                 .get(&id)
                 .map(Reference::Node)
                 .unwrap_or(Reference::Unresolved),
-            UnresolvedReference::Way(id) => self.ways
+            UnresolvedReference::Way(id) => self
+                .ways
                 .get(&id)
                 .map(Reference::Way)
                 .unwrap_or(Reference::Unresolved),
-            UnresolvedReference::Relation(id) => self.relations
+            UnresolvedReference::Relation(id) => self
+                .relations
                 .get(&id)
                 .map(Reference::Relation)
                 .unwrap_or(Reference::Unresolved),
@@ -130,7 +132,6 @@ enum ElementData {
     Ignored,
 }
 
-
 impl FromStr for ElementType {
     type Err = Error;
 
@@ -149,7 +150,7 @@ impl FromStr for ElementType {
 }
 
 fn parse_element_data<R: Read>(parser: &mut EventReader<R>) -> Result<ElementData, Error> {
-    let element = try!(parser.next());
+    let element = parser.next()?;
     match element {
         XmlEvent::EndDocument => Ok(ElementData::EndOfDocument),
         XmlEvent::StartElement {
@@ -200,21 +201,19 @@ fn parse_relation<R: Read>(
                 let element_type = try!(ElementType::from_str(&name.local_name));
 
                 match element_type {
-                    ElementType::Tag => if let Ok(tag) = parse_tag(&attributes) {
-                        tags.push(tag);
-                    },
+                    ElementType::Tag => {
+                        if let Ok(tag) = parse_tag(&attributes) {
+                            tags.push(tag);
+                        }
+                    }
                     ElementType::Member => {
-                        let el_type = try!(
-                            find_attribute_uncasted("type", &attributes)
-                                .map_err(Error::MalformedRelation)
-                        );
-                        let el_ref = try!(
-                            find_attribute("ref", &attributes).map_err(Error::MalformedRelation)
-                        );
-                        let el_role = try!(
-                            find_attribute_uncasted("role", &attributes)
-                                .map_err(Error::MalformedRelation)
-                        );
+                        let el_type = try!(find_attribute_uncasted("type", &attributes)
+                            .map_err(Error::MalformedRelation));
+                        let el_ref =
+                            try!(find_attribute("ref", &attributes)
+                                .map_err(Error::MalformedRelation));
+                        let el_role = try!(find_attribute_uncasted("role", &attributes)
+                            .map_err(Error::MalformedRelation));
 
                         let el = match el_type.to_lowercase().as_ref() {
                             "node" => Member::Node(UnresolvedReference::Node(el_ref), el_role),
@@ -227,11 +226,11 @@ fn parse_relation<R: Read>(
 
                         members.push(el);
                     }
-                    ElementType::Bounds |
-                    ElementType::Node |
-                    ElementType::Relation |
-                    ElementType::Way |
-                    ElementType::NodeRef => {
+                    ElementType::Bounds
+                    | ElementType::Node
+                    | ElementType::Relation
+                    | ElementType::Way
+                    | ElementType::NodeRef => {
                         return Err(Error::MalformedRelation(ErrorReason::IllegalNesting))
                     }
                 }
@@ -266,19 +265,21 @@ fn parse_way<R: Read>(
                 let element_type = try!(ElementType::from_str(&name.local_name));
 
                 match element_type {
-                    ElementType::Tag => if let Ok(tag) = parse_tag(&attributes) {
-                        tags.push(tag);
-                    },
+                    ElementType::Tag => {
+                        if let Ok(tag) = parse_tag(&attributes) {
+                            tags.push(tag);
+                        }
+                    }
                     ElementType::NodeRef => {
                         let node_ref =
                             try!(find_attribute("ref", &attributes).map_err(Error::MalformedWay));
                         node_refs.push(UnresolvedReference::Node(node_ref));
                     }
-                    ElementType::Bounds |
-                    ElementType::Node |
-                    ElementType::Relation |
-                    ElementType::Way |
-                    ElementType::Member => {
+                    ElementType::Bounds
+                    | ElementType::Node
+                    | ElementType::Relation
+                    | ElementType::Way
+                    | ElementType::Member => {
                         return Err(Error::MalformedWay(ErrorReason::IllegalNesting))
                     }
                 }
@@ -314,15 +315,17 @@ fn parse_node<R: Read>(
                 let element_type = try!(ElementType::from_str(&name.local_name));
 
                 match element_type {
-                    ElementType::Tag => if let Ok(tag) = parse_tag(&attributes) {
-                        tags.push(tag);
-                    },
-                    ElementType::Bounds |
-                    ElementType::Node |
-                    ElementType::Relation |
-                    ElementType::Way |
-                    ElementType::NodeRef |
-                    ElementType::Member => {
+                    ElementType::Tag => {
+                        if let Ok(tag) = parse_tag(&attributes) {
+                            tags.push(tag);
+                        }
+                    }
+                    ElementType::Bounds
+                    | ElementType::Node
+                    | ElementType::Relation
+                    | ElementType::Way
+                    | ElementType::NodeRef
+                    | ElementType::Member => {
                         return Err(Error::MalformedNode(ErrorReason::IllegalNesting))
                     }
                 }
